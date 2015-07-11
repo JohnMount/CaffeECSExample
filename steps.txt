@@ -1,0 +1,256 @@
+
+
+# These instructions: https://github.com/JohnMount/CaffeECSExample
+
+# Maybe try a g2.8xlarge instance (cheaper if you go for spot instances)
+# OS: Ubuntu Server 14.04 LTS (HVM), SSD Volume Type - ami-5189a661 (Amazon's current offering)
+# Must go to instance details to make sure you have more storage (I used 64GB)
+
+# On your local machine, ssh to EC2 intance
+# ssh -i KEY.PEM  ubuntu@IPADDRESS
+
+
+# get the machine up to date and make sure we have git and emacs
+# (Java is for my later use, not needed for Caffe)
+# ssh -i KEY.PEM  ubuntu@IPADDRESS
+sudo apt-get -y update
+sudo apt-get -y upgrade
+sudo apt-get -y install git emacs default-jre default-jdk
+
+
+
+
+
+
+# Set up Nvidia drivers, CUDA, and maybey cuDNN
+# Finally found some correct instructions:
+#  https://github.com/BVLC/caffe/wiki/Install-Caffe-on-EC2-from-scratch-(Ubuntu,-CUDA-7,-cuDNN)
+
+# ssh -i KEY.PEM  ubuntu@IPADDRESS
+sudo apt-get -y install build-essential
+wget http://developer.download.nvidia.com/compute/cuda/7_0/Prod/local_installers/cuda_7.0.28_linux.run
+chmod +x cuda_7.0.28_linux.run
+mkdir nvidia_installers
+./cuda_7.0.28_linux.run -extract=`pwd`/nvidia_installers
+# in next step
+# If asked: GRUB: select "keep the local version currently installed"
+sudo apt-get -y install linux-image-extra-virtual
+printf "blacklist nouveau\nblacklist lbm-nouveau\noptions nouveau modeset=0\nalias nouveau off\nalias lbm-nouveau off\n" | sudo tee -a /etc/modprobe.d/blacklist-nouveau.conf
+printf "options nouveau modeset=0\n" | sudo tee -a /etc/modprobe.d/nouveau-kms.conf
+sudo update-initramfs -u
+sudo reboot
+
+# ssh -i KEY.PEM  ubuntu@IPADDRESS
+sudo apt-get -y update
+sudo apt-get -y upgrade
+sudo apt-get -y install linux-source
+sudo apt-get -y install linux-headers-`uname -r`
+cd nvidia_installers
+# in next step
+# Accept, OK+
+# update X config: NO
+sudo ./NVIDIA-Linux-x86_64-346.46.run
+sudo modprobe nvidia
+sudo apt-get -y install build-essential
+# in next step "q" to get to end of license agreement
+# accept and pick defaults
+sudo ./cuda-linux64-rel-7.0.28-19326674.run
+# in next step "q" to get to end of license agreement
+# accept and pick defaults
+sudo ./cuda-samples-linux-7.0.28-19326674.run
+cd ..
+# add to ~/.bashrc
+printf 'export PATH=$PATH:/usr/local/cuda-7.0/bin\nexport LD_LIBRARY_PATH=:/usr/local/cuda-7.0/lib64\n' >> .bashrc
+source ~/.bashrc
+sudo apt-get -y update
+sudo apt-get -y upgrade
+nvidia-smi
+# actually ran next line later (after cython step), but should work here
+sudo apt-get install -y libprotobuf-dev libleveldb-dev libsnappy-dev libopencv-dev libboost-all-dev libhdf5-serial-dev protobuf-compiler gfortran libjpeg62 libfreeimage-dev libatlas-base-dev git python-dev python-pip libgoogle-glog-dev libbz2-dev libxml2-dev libxslt-dev libffi-dev libssl-dev libgflags-dev liblmdb-dev python-yaml python-numpy
+sudo reboot  # probably don't need this one
+
+# skipping this
+# need to register with Nvidia to get cudnn install
+# cuDNN
+# tar -zxf cudnn-6.5-linux-x64-v2.tgz
+# cd cudnn-6.5-linux-x64-v2
+# sudo cp lib* /usr/local/cuda/lib64/
+# sudo cp cudnn.h /usr/local/cuda/include/
+
+
+
+
+
+
+# From: http://caffe.berkeleyvision.org/install_apt.html
+sudo apt-get -y update
+sudo apt-get -y upgrade
+sudo apt-get -y install libprotobuf-dev libleveldb-dev libsnappy-dev libopencv-dev libboost-all-dev libhdf5-serial-dev libatlas-base-dev gfortran libgflags-dev libgoogle-glog-dev liblmdb-dev protobuf-compiler python-dev python-pip
+
+# From: https://github.com/BVLC/caffe
+git clone https://github.com/BVLC/caffe.git
+printf 'export PYTHONPATH=/home/ubuntu/caffe/python:$PYTHONPATH\n' >> ~/.bashrc
+export PYTHONPATH=/home/ubuntu/caffe/python:$PYTHONPATH
+
+# From: http://rocknrollnerd.github.io/ml/2015/05/27/leopard-sofa.html
+# http://nbviewer.ipython.org/github/BVLC/caffe/blob/master/examples/classification.ipynb
+sudo pip install numpy matplotlib
+sudo pip install "ipython[all]"
+
+# From http://stackoverflow.com/questions/2213551/installing-scipy-with-pip
+sudo pip install cython
+sudo pip install scipy
+# From https://github.com/BVLC/caffe/issues/50
+sudo pip install scikit-image
+
+# From https://groups.google.com/forum/#!topic/caffe-users/9Q10WkpCGxs
+sudo pip install protobuf
+
+# From: https://github.com/BVLC/caffe/issues/1988
+printf 'export LD_LIBRARY_PATH=/home/ubuntu/caffe/.build_release/lib/:$LD_LIBRARY_PATH\n' >> ~/.bashrc
+export LD_LIBRARY_PATH=/home/ubuntu/caffe/.build_release/lib/:$LD_LIBRARY_PATH
+
+# From: http://caffe.berkeleyvision.org/installation.html#compilation
+cd caffe
+cat python/requirements.txt | xargs -L 1 sudo pip install
+cp Makefile.config.example Makefile.config
+make pycaffe -j8
+make all -j8
+make test -j8
+# Next step: ingore 1394 error/warning
+# http://stackoverflow.com/questions/12689304/ctypes-error-libdc1394-error-failed-to-initialize-libdc1394
+make runtest
+
+
+
+# get a model
+scripts/download_model_binary.py models/bvlc_reference_caffenet
+# to get codes:
+pushd data/ilsvrc12
+bash get_ilsvrc_aux.sh
+# look at synset_words.txt (remember grep numbers from 1, arrays from zero)
+# fgrep -in crab synset_words.txt 
+# 119:n01978287 Dungeness crab, Cancer magister
+# 120:n01978455 rock crab, Cancer irroratus
+# 121:n01980166 fiddler crab
+# 122:n01981276 king crab, Alaska crab, Alaskan king crab, Alaska king crab, Paralithodes camtschatica
+# 126:n01986214 hermit crab
+popd
+
+
+
+# install avconv
+sudo apt-get -y install libav-tools
+
+
+
+# install ffmpeg
+# from: https://trac.ffmpeg.org/wiki/CompilationGuide/Ubuntu
+sudo apt-get -y --force-yes install autoconf automake build-essential libass-dev libfreetype6-dev libsdl1.2-dev libtheora-dev libtool libva-dev libvdpau-dev libvorbis-dev libxcb1-dev libxcb-shm0-dev libxcb-xfixes0-dev pkg-config texi2html zlib1g-dev
+mkdir ~/ffmpeg_sources
+# Yasm
+sudo apt-get -y install yasm
+# libx264
+cd ~/ffmpeg_sources
+wget http://download.videolan.org/pub/x264/snapshots/last_x264.tar.bz2
+tar xjvf last_x264.tar.bz2
+cd x264-snapshot*
+PATH="$HOME/bin:$PATH" ./configure --prefix="$HOME/ffmpeg_build" --bindir="$HOME/bin" --enable-static
+PATH="$HOME/bin:$PATH" make
+sudo make install
+make distclean
+# libx265
+cd ~/ffmpeg_sources
+sudo apt-get -y install cmake mercurial
+hg clone https://bitbucket.org/multicoreware/x265
+cd ~/ffmpeg_sources/x265/build/linux
+PATH="$HOME/bin:$PATH" cmake -G "Unix Makefiles" -DCMAKE_INSTALL_PREFIX="$HOME/ffmpeg_build" -DENABLE_SHARED:bool=off ../../source
+make
+sudo make install
+# libfdk-aac
+cd ~/ffmpeg_sources
+wget -O fdk-aac.tar.gz https://github.com/mstorsjo/fdk-aac/tarball/master
+tar xzvf fdk-aac.tar.gz
+cd mstorsjo-fdk-aac*
+autoreconf -fiv
+./configure --prefix="$HOME/ffmpeg_build" --disable-shared
+make
+sudo make install
+make distclean
+# libmp3lame
+cd ~/ffmpeg_sources
+sudo apt-get -y install libmp3lame-dev
+# libopus
+cd ~/ffmpeg_sources
+sudo apt-get -y install libopus-dev
+# libvpx
+cd ~/ffmpeg_sources
+wget http://webm.googlecode.com/files/libvpx-v1.3.0.tar.bz2
+tar xjvf libvpx-v1.3.0.tar.bz2
+cd libvpx-v1.3.0
+PATH="$HOME/bin:$PATH" ./configure --prefix="$HOME/ffmpeg_build" --disable-examples --disable-unit-tests
+PATH="$HOME/bin:$PATH" make
+sudo make install
+make clean
+# ffmpeg
+cd ~/ffmpeg_sources
+wget http://ffmpeg.org/releases/ffmpeg-snapshot.tar.bz2
+tar xjvf ffmpeg-snapshot.tar.bz2
+cd ffmpeg
+PATH="$HOME/bin:$PATH" PKG_CONFIG_PATH="$HOME/ffmpeg_build/lib/pkgconfig" ./configure \
+  --prefix="$HOME/ffmpeg_build" \
+  --pkg-config-flags="--static" \
+  --extra-cflags="-I$HOME/ffmpeg_build/include" \
+  --extra-ldflags="-L$HOME/ffmpeg_build/lib" \
+  --bindir="$HOME/bin" \
+  --enable-gpl \
+  --enable-libass \
+  --enable-libfdk-aac \
+  --enable-libfreetype \
+  --enable-libmp3lame \
+  --enable-libopus \
+  --enable-libtheora \
+  --enable-libvorbis \
+  --enable-libvpx \
+  --enable-libx264 \
+  --enable-libx265 \
+  --enable-nonfree
+PATH="$HOME/bin:$PATH" make
+sudo make install
+make distclean
+cd
+export PATH="/home/ubuntu/bin:$PATH"
+printf 'export PATH="/home/ubuntu/bin:$PATH"\n' >> .bashrc
+hash -r
+
+
+
+
+
+
+cd
+git clone https://github.com/google/deepdream.git
+git clone https://github.com/graphific/DeepDreamVideo
+
+# get a model
+cd
+wget http://dl.caffe.berkeleyvision.org/bvlc_googlenet.caffemodel
+mv bvlc_googlenet.caffemodel caffe/models/bvlc_googlenet/net.caffemodel
+
+# make a movie
+# from: https://github.com/graphific/DeepDreamVideo
+# scp -i KEY.PEM  VIDEO.mp4 ubuntu@IPADDRESS:video.mp4
+DeepDreamVideo/1_movie2frames.sh avconv video.mp4 frames
+nohup python DeepDreamVideo/2_dreaming_time.py -i frames -o processed -t caffe/models/bvlc_googlenet/ -m net.caffemodel -l inception_4c/output > runLog.txt 2>&1 &
+# when previous step done re-assemble video
+ffmpeg -framerate 25 -i processed/%4d.jpg -c:v libx264 -r 30 -pix_fmt yuv420p deepdreamvideo.mp4
+# add back in sound on your own side
+
+# copy back to your own machine
+# scp -i KEY.PEM ubuntu@IPADDRESS:deepdreamvideo.mp4 deepdreamvideo.mp4
+
+
+
+
+
+
