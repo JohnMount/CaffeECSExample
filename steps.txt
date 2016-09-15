@@ -241,7 +241,7 @@ mv bvlc_googlenet.caffemodel caffe/models/bvlc_googlenet/net.caffemodel
 # from: https://github.com/graphific/DeepDreamVideo
 # scp -i KEY.PEM  VIDEO.mp4 ubuntu@IPADDRESS:video.mp4
 DeepDreamVideo/1_movie2frames.sh avconv video.mp4 frames
-nohup python DeepDreamVideo/2_dreaming_time.py -i frames -o processed -t caffe/models/bvlc_googlenet/ -m net.caffemodel -l inception_4c/output > runLog.txt 2>&1 &
+nohup python DeepDreamVideo/2_dreaming_time.py -it jpg --gpu 0 -i frames -o processed -t caffe/models/bvlc_googlenet/ -m net.caffemodel -l inception_4c/output > runLog.txt 2>&1 &
 # when previous step done re-assemble video
 ffmpeg -framerate 25 -i processed/%4d.jpg -c:v libx264 -r 30 -pix_fmt yuv420p deepdreamvideo.mp4
 # add back in sound on your own side
